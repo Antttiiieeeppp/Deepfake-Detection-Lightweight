@@ -1,0 +1,9 @@
+efficientnet_pytorch
+vit_pytorch
+progress
+albumentations
+MTCNN
+facenet-pytorch
+scikit-learn
+pandas
+numpy
