@@ -174,7 +174,7 @@ if __name__ == "__main__":
         for folder in folders:
             subfolder = os.path.join(dataset, folder)
             subfolder_path = os.listdir(subfolder)  ##
-            for index, video_folder_name in enumerate(subfolder_path[:len(subfolder_path)//10]):##
+            for index, video_folder_name in enumerate(subfolder_path[:len(subfolder_path)//10]):## 데이터셋 1/10 만 돌리기
             #for index, video_folder_name in enumerate(os.listdir(subfolder)):      # default
                 if index == opt.max_videos:
                     break
@@ -261,10 +261,9 @@ if __name__ == "__main__":
             train_correct += corrects
             positive += positive_class
             negative += negative_class
-            optimizer.zero_grad()
             
+            optimizer.zero_grad()
             loss.backward()
-
             optimizer.step()
             counter += 1
             total_loss += round(loss.item(), 2)
@@ -280,17 +279,27 @@ if __name__ == "__main__":
         val_correct = 0
         val_positive = 0
         val_negative = 0
+        # for F1-score, Precision, and Recall
+        # val_preds = []
+        # val_labels_list = []
        
         train_correct /= train_samples
         total_loss /= counter
+        
         for index, (val_images, val_labels) in enumerate(val_dl):
     
-            val_images = np.transpose(val_images, (0, 3, 1, 2))
-            
-            val_images = val_images.cuda()
-            val_labels = val_labels.unsqueeze(1)
+            val_images = np.transpose(val_images, (0, 3, 1, 2)).cuda()
+            # # val_labels = val_labels.unsqueeze(1).cuda()
+            # val_labels = val_labels.unsqueeze(1) 
+            # with torch.no_grad():
+            #     y_pred = model(val_images)
+            #     preds = torch.sigmoid(y_pred).cpu().numpy() > 0.5  # Binary predictions
+
+            # val_preds.extend(preds.flatten())
+            # val_labels_list.extend(val_labels.cpu().numpy().flatten())
+            # #
             val_pred = model(val_images)
-            val_pred = val_pred.cpu()
+            val_pred = val_pred.cuda()
             val_loss = loss_fn(val_pred, val_labels)
             total_val_loss += round(val_loss.item(), 2)
             corrects, positive_class, negative_class = check_correct(val_pred, val_labels)
@@ -303,6 +312,19 @@ if __name__ == "__main__":
         scheduler.step()
         bar.finish()
         
+        # # # Compute Validation Metrics
+        # precision = precision_score(val_labels_list, val_preds, average='binary')
+        # recall = recall_score(val_labels_list, val_preds, average='binary')
+        # f1 = f1_score(val_labels_list, val_preds, average='binary')
+
+        # # Print 
+        # print(f"[Validation Metrics] Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
+
+        # # print validation accuracy
+        # val_correct = (np.array(val_preds) == np.array(val_labels_list)).sum()
+        # val_accuracy = val_correct / len(val_labels_list)
+        # print(f"[Validation Accuracy]: {val_accuracy:.4f}")
+        # # #
 
         total_val_loss /= val_counter
         val_correct /= validation_samples
