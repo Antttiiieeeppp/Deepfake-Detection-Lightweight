@@ -122,7 +122,7 @@ def read_frames(video_path, train_dataset, validation_dataset):
 # Main body
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_epochs', default=10, type=int,  # default = 300 -> 10
+    parser.add_argument('--num_epochs', default=100, type=int,  # default = 300 -> 100
                         help='Number of training epochs.')
     parser.add_argument('--workers', default=4, type=int,       # default = 10 -> 4
                         help='Number of data loader workers.')
@@ -136,7 +136,7 @@ if __name__ == "__main__":
                         help="Which configuration to use. See into 'config' folder.")
     parser.add_argument('--efficient_net', type=int, default=0, 
                         help="Which EfficientNet version to use (0 or 7, default: 0)")
-    parser.add_argument('--patience', type=int, default=5, 
+    parser.add_argument('--patience', type=int, default=10, 
                         help="How many epochs wait before stopping for validation loss not improving.")
     
     opt = parser.parse_args()
@@ -174,7 +174,7 @@ if __name__ == "__main__":
         for folder in folders:
             subfolder = os.path.join(dataset, folder)
             subfolder_path = os.listdir(subfolder)  ##
-            for index, video_folder_name in enumerate(subfolder_path[:len(subfolder_path)//10]):## 데이터셋 1/10 만 돌리기
+            for index, video_folder_name in enumerate(subfolder_path[:len(subfolder_path)//100]): ## 데이터셋 1/100 만 돌리기
             #for index, video_folder_name in enumerate(os.listdir(subfolder)):      # default
                 if index == opt.max_videos:
                     break
@@ -273,35 +273,50 @@ if __name__ == "__main__":
              
             if index%1200 == 0:
                 print("\nLoss: ", total_loss/counter, "Accuracy: ",train_correct/(counter*config['training']['bs']) ,"Train 0s: ", negative, "Train 1s:", positive)  
-
+                '''
+                print(f"(#{t}/{opt.num_epochs}) loss: {total_loss:.4f} | "
+                f"accuracy: {train_correct:.4f} | "
+                f"\n\tval_loss: {total_val_loss:.4f} | "
+                f"val_accuracy: {val_correct:.4f} | "
+                f"\n\tval_0s(= REAL): {val_negative}/{np.count_nonzero(validation_labels == 0)} | "
+                f"val_1s(= FAKE): {val_positive}/{np.count_nonzero(validation_labels == 1)}")
+                '''
+                print("_______________________________________________")
 
         val_counter = 0
         val_correct = 0
         val_positive = 0
         val_negative = 0
         # for F1-score, Precision, and Recall
-        # val_preds = []
-        # val_labels_list = []
+        val_preds = []
+        val_labels_list = []
        
         train_correct /= train_samples
         total_loss /= counter
         
         for index, (val_images, val_labels) in enumerate(val_dl):
-    
-            val_images = np.transpose(val_images, (0, 3, 1, 2)).cuda()
-            # # val_labels = val_labels.unsqueeze(1).cuda()
-            # val_labels = val_labels.unsqueeze(1) 
-            # with torch.no_grad():
-            #     y_pred = model(val_images)
-            #     preds = torch.sigmoid(y_pred).cpu().numpy() > 0.5  # Binary predictions
+            val_images = np.transpose(val_images, (0, 3, 1, 2))
+            val_images = val_images.cuda()
+            
+            val_labels = val_labels.unsqueeze(1).float()
+            
+            ###
+            with torch.no_grad():
+                val_pred = model(val_images)  # Get predictions from the model
+                val_pred = val_pred.cpu().float()
+                preds = torch.sigmoid(val_pred).numpy() > 0.5  # Binary predictions
 
-            # val_preds.extend(preds.flatten())
-            # val_labels_list.extend(val_labels.cpu().numpy().flatten())
-            # #
-            val_pred = model(val_images)
-            val_pred = val_pred.cuda()
+            # Collect predictions and true labels for precision, recall, and f1-score calculation
+            val_preds.extend(preds.flatten())
+            val_labels_list.extend(val_labels.cpu().numpy().flatten())
+            ###        
+            
+            # val_pred = model(val_images)          # default
+            # val_pred = val_pred.cpu().float()     # default
+            
             val_loss = loss_fn(val_pred, val_labels)
             total_val_loss += round(val_loss.item(), 2)
+            
             corrects, positive_class, negative_class = check_correct(val_pred, val_labels)
             val_correct += corrects
             val_positive += positive_class
@@ -313,31 +328,37 @@ if __name__ == "__main__":
         bar.finish()
         
         # # # Compute Validation Metrics
-        # precision = precision_score(val_labels_list, val_preds, average='binary')
-        # recall = recall_score(val_labels_list, val_preds, average='binary')
-        # f1 = f1_score(val_labels_list, val_preds, average='binary')
+        precision = precision_score(val_labels_list, val_preds, average='binary', zero_division=0)
+        recall = recall_score(val_labels_list, val_preds, average='binary', zero_division=0)
+        f1 = f1_score(val_labels_list, val_preds, average='binary', zero_division=0)
 
-        # # Print 
-        # print(f"[Validation Metrics] Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
+        # Print 
+        print(f"[Validation Metrics] Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
 
-        # # print validation accuracy
-        # val_correct = (np.array(val_preds) == np.array(val_labels_list)).sum()
-        # val_accuracy = val_correct / len(val_labels_list)
-        # print(f"[Validation Accuracy]: {val_accuracy:.4f}")
+        # print validation accuracy
+        val_correct = (np.array(val_preds) == np.array(val_labels_list)).sum()
+        val_accuracy = val_correct / len(val_labels_list)
+        print(f"[Validation Accuracy]: {val_accuracy:.4f}")
+        print("_______________________________________________")
         # # #
 
         total_val_loss /= val_counter
         val_correct /= validation_samples
         if previous_loss <= total_val_loss:
-            print("Validation loss did not improved")
+            print(" ==> Validation loss did not improved")
             not_improved_loss += 1
         else:
             not_improved_loss = 0
         
         previous_loss = total_val_loss
-        print("#" + str(t) + "/" + str(opt.num_epochs) + " loss:" +
-            str(total_loss) + " accuracy:" + str(train_correct) +" val_loss:" + str(total_val_loss) + " val_accuracy:" + str(val_correct) + " val_0s:" + str(val_negative) + "/" + str(np.count_nonzero(validation_labels == 0)) + " val_1s:" + str(val_positive) + "/" + str(np.count_nonzero(validation_labels == 1)))
-    
+        # print("( #" + str(t) + "/" + str(opt.num_epochs) + ") loss:" +
+        #     str(total_loss:.4f) + " accuracy:" + str(train_correct) +" val_loss:" + str(total_val_loss) + " val_accuracy:" + str(val_correct) + " val_0s:" + str(val_negative) + "/" + str(np.count_nonzero(validation_labels == 0)) + " val_1s:" + str(val_positive) + "/" + str(np.count_nonzero(validation_labels == 1)))
+        print(f"(#{t}/{opt.num_epochs}) loss: {total_loss:.4f} | "
+                f"accuracy: {train_correct:.4f} | "
+                f"\n\tval_loss: {total_val_loss:.4f} | "
+                f"val_accuracy: {val_correct:.4f} | "
+                f"\n\tval_0s(= REAL): {val_negative}/{np.count_nonzero(validation_labels == 0)} | "
+                f"val_1s(= FAKE): {val_positive}/{np.count_nonzero(validation_labels == 1)}")
         
         if not os.path.exists(MODELS_PATH):
             os.makedirs(MODELS_PATH)
