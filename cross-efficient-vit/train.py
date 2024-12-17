@@ -15,8 +15,7 @@ from multiprocessing import Manager
 from progress.bar import ChargingBar
 from cross_efficient_vit import CrossEfficientViT
 import uuid
-from torch.utils.data import DataLoader, TensorDataset, Dataset
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import cv2
 from transforms.albu import IsotropicResize
 import glob
@@ -31,7 +30,8 @@ import math
 import yaml
 import argparse
 
-BASE_DIR = '../../deep_fakes_backup/'   ## testing w/ sample data called 'deep_fakes_backup'
+# BASE_DIR = '../../deep_fakes/'  
+BASE_DIR = '../../deep_fakes/'   ## testing w/ sample data called 'deep_fakes_backup'
 DATA_DIR = os.path.join(BASE_DIR, "dataset")
 TRAINING_DIR = os.path.join(DATA_DIR, "training_set")
 VALIDATION_DIR = os.path.join(DATA_DIR, "validation_set")
@@ -122,13 +122,13 @@ def read_frames(video_path, train_dataset, validation_dataset):
 # Main body
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_epochs', default=50, type=int,  # default=300
+    parser.add_argument('--num_epochs', default=10, type=int,  # default = 300 -> 10
                         help='Number of training epochs.')
-    parser.add_argument('--workers', default=10, type=int,
+    parser.add_argument('--workers', default=4, type=int,       # default = 10 -> 4
                         help='Number of data loader workers.')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                         help='Path to latest checkpoint (default: none).')
-    parser.add_argument('--dataset', type=str, default='All', 
+    parser.add_argument('--dataset', type=str, default='Deepfakes', # dafault = All -> Deepfakes
                         help="Which dataset to use (Deepfakes|Face2Face|FaceShifter|FaceSwap|NeuralTextures|All)")
     parser.add_argument('--max_videos', type=int, default=-1, 
                         help="Maximum number of videos to use for training (default: all).")
@@ -173,7 +173,9 @@ if __name__ == "__main__":
     for dataset in sets:
         for folder in folders:
             subfolder = os.path.join(dataset, folder)
-            for index, video_folder_name in enumerate(os.listdir(subfolder)):
+            subfolder_path = os.listdir(subfolder)  ##
+            for index, video_folder_name in enumerate(subfolder_path[:len(subfolder_path)//10]):##
+            #for index, video_folder_name in enumerate(os.listdir(subfolder)):      # default
                 if index == opt.max_videos:
                     break
                 if os.path.isdir(os.path.join(subfolder, video_folder_name)):
