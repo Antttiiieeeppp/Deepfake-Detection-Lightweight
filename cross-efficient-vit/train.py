@@ -15,8 +15,7 @@ from multiprocessing import Manager
 from progress.bar import ChargingBar
 from cross_efficient_vit import CrossEfficientViT
 import uuid
-from torch.utils.data import DataLoader, TensorDataset, Dataset
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import cv2
 from transforms.albu import IsotropicResize
 import glob
@@ -31,7 +30,8 @@ import math
 import yaml
 import argparse
 
-BASE_DIR = '../../deep_fakes_backup/'   ## testing w/ sample data called 'deep_fakes_backup'
+# BASE_DIR = '../../deep_fakes/'  
+BASE_DIR = '../../deep_fakes/'   ## testing w/ sample data called 'deep_fakes_backup'
 DATA_DIR = os.path.join(BASE_DIR, "dataset")
 TRAINING_DIR = os.path.join(DATA_DIR, "training_set")
 VALIDATION_DIR = os.path.join(DATA_DIR, "validation_set")
@@ -122,13 +122,13 @@ def read_frames(video_path, train_dataset, validation_dataset):
 # Main body
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_epochs', default=50, type=int,  # default=300
+    parser.add_argument('--num_epochs', default=100, type=int,  # default = 300 -> 100
                         help='Number of training epochs.')
-    parser.add_argument('--workers', default=10, type=int,
+    parser.add_argument('--workers', default=4, type=int,       # default = 10 -> 4
                         help='Number of data loader workers.')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                         help='Path to latest checkpoint (default: none).')
-    parser.add_argument('--dataset', type=str, default='All', 
+    parser.add_argument('--dataset', type=str, default='Deepfakes', # dafault = All -> Deepfakes
                         help="Which dataset to use (Deepfakes|Face2Face|FaceShifter|FaceSwap|NeuralTextures|All)")
     parser.add_argument('--max_videos', type=int, default=-1, 
                         help="Maximum number of videos to use for training (default: all).")
@@ -136,7 +136,7 @@ if __name__ == "__main__":
                         help="Which configuration to use. See into 'config' folder.")
     parser.add_argument('--efficient_net', type=int, default=0, 
                         help="Which EfficientNet version to use (0 or 7, default: 0)")
-    parser.add_argument('--patience', type=int, default=5, 
+    parser.add_argument('--patience', type=int, default=10, 
                         help="How many epochs wait before stopping for validation loss not improving.")
     
     opt = parser.parse_args()
@@ -173,7 +173,9 @@ if __name__ == "__main__":
     for dataset in sets:
         for folder in folders:
             subfolder = os.path.join(dataset, folder)
-            for index, video_folder_name in enumerate(os.listdir(subfolder)):
+            subfolder_path = os.listdir(subfolder)  ##
+            for index, video_folder_name in enumerate(subfolder_path[:len(subfolder_path)//100]): ## 데이터셋 1/100 만 돌리기
+            #for index, video_folder_name in enumerate(os.listdir(subfolder)):      # default
                 if index == opt.max_videos:
                     break
                 if os.path.isdir(os.path.join(subfolder, video_folder_name)):
@@ -259,10 +261,9 @@ if __name__ == "__main__":
             train_correct += corrects
             positive += positive_class
             negative += negative_class
-            optimizer.zero_grad()
             
+            optimizer.zero_grad()
             loss.backward()
-
             optimizer.step()
             counter += 1
             total_loss += round(loss.item(), 2)
@@ -272,25 +273,50 @@ if __name__ == "__main__":
              
             if index%1200 == 0:
                 print("\nLoss: ", total_loss/counter, "Accuracy: ",train_correct/(counter*config['training']['bs']) ,"Train 0s: ", negative, "Train 1s:", positive)  
-
+                '''
+                print(f"(#{t}/{opt.num_epochs}) loss: {total_loss:.4f} | "
+                f"accuracy: {train_correct:.4f} | "
+                f"\n\tval_loss: {total_val_loss:.4f} | "
+                f"val_accuracy: {val_correct:.4f} | "
+                f"\n\tval_0s(= REAL): {val_negative}/{np.count_nonzero(validation_labels == 0)} | "
+                f"val_1s(= FAKE): {val_positive}/{np.count_nonzero(validation_labels == 1)}")
+                '''
+                print("_______________________________________________")
 
         val_counter = 0
         val_correct = 0
         val_positive = 0
         val_negative = 0
+        # for F1-score, Precision, and Recall
+        val_preds = []
+        val_labels_list = []
        
         train_correct /= train_samples
         total_loss /= counter
+        
         for index, (val_images, val_labels) in enumerate(val_dl):
-    
             val_images = np.transpose(val_images, (0, 3, 1, 2))
-            
             val_images = val_images.cuda()
-            val_labels = val_labels.unsqueeze(1)
-            val_pred = model(val_images)
-            val_pred = val_pred.cpu()
+            
+            val_labels = val_labels.unsqueeze(1).float()
+            
+            ###
+            with torch.no_grad():
+                val_pred = model(val_images)  # Get predictions from the model
+                val_pred = val_pred.cpu().float()
+                preds = torch.sigmoid(val_pred).numpy() > 0.5  # Binary predictions
+
+            # Collect predictions and true labels for precision, recall, and f1-score calculation
+            val_preds.extend(preds.flatten())
+            val_labels_list.extend(val_labels.cpu().numpy().flatten())
+            ###        
+            
+            # val_pred = model(val_images)          # default
+            # val_pred = val_pred.cpu().float()     # default
+            
             val_loss = loss_fn(val_pred, val_labels)
             total_val_loss += round(val_loss.item(), 2)
+            
             corrects, positive_class, negative_class = check_correct(val_pred, val_labels)
             val_correct += corrects
             val_positive += positive_class
@@ -301,19 +327,38 @@ if __name__ == "__main__":
         scheduler.step()
         bar.finish()
         
+        # # # Compute Validation Metrics
+        precision = precision_score(val_labels_list, val_preds, average='binary', zero_division=0)
+        recall = recall_score(val_labels_list, val_preds, average='binary', zero_division=0)
+        f1 = f1_score(val_labels_list, val_preds, average='binary', zero_division=0)
+
+        # Print 
+        print(f"[Validation Metrics] Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
+
+        # print validation accuracy
+        val_correct = (np.array(val_preds) == np.array(val_labels_list)).sum()
+        val_accuracy = val_correct / len(val_labels_list)
+        print(f"[Validation Accuracy]: {val_accuracy:.4f}")
+        print("_______________________________________________")
+        # # #
 
         total_val_loss /= val_counter
         val_correct /= validation_samples
         if previous_loss <= total_val_loss:
-            print("Validation loss did not improved")
+            print(" ==> Validation loss did not improved")
             not_improved_loss += 1
         else:
             not_improved_loss = 0
         
         previous_loss = total_val_loss
-        print("#" + str(t) + "/" + str(opt.num_epochs) + " loss:" +
-            str(total_loss) + " accuracy:" + str(train_correct) +" val_loss:" + str(total_val_loss) + " val_accuracy:" + str(val_correct) + " val_0s:" + str(val_negative) + "/" + str(np.count_nonzero(validation_labels == 0)) + " val_1s:" + str(val_positive) + "/" + str(np.count_nonzero(validation_labels == 1)))
-    
+        # print("( #" + str(t) + "/" + str(opt.num_epochs) + ") loss:" +
+        #     str(total_loss:.4f) + " accuracy:" + str(train_correct) +" val_loss:" + str(total_val_loss) + " val_accuracy:" + str(val_correct) + " val_0s:" + str(val_negative) + "/" + str(np.count_nonzero(validation_labels == 0)) + " val_1s:" + str(val_positive) + "/" + str(np.count_nonzero(validation_labels == 1)))
+        print(f"(#{t}/{opt.num_epochs}) loss: {total_loss:.4f} | "
+                f"accuracy: {train_correct:.4f} | "
+                f"\n\tval_loss: {total_val_loss:.4f} | "
+                f"val_accuracy: {val_correct:.4f} | "
+                f"\n\tval_0s(= REAL): {val_negative}/{np.count_nonzero(validation_labels == 0)} | "
+                f"val_1s(= FAKE): {val_positive}/{np.count_nonzero(validation_labels == 1)}")
         
         if not os.path.exists(MODELS_PATH):
             os.makedirs(MODELS_PATH)
