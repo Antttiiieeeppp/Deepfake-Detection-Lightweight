@@ -254,7 +254,7 @@ if __name__ == "__main__":
         for folder in folders:
             subfolder = os.path.join(dataset, folder)
             subfolder_path = os.listdir(subfolder) ##
-            for index, video_folder_name in enumerate(subfolder_path[:len(subfolder_path)//10]):
+            for index, video_folder_name in enumerate(subfolder_path[:len(subfolder_path)//100]):
             #for index, video_folder_name in enumerate(os.listdir(subfolder)): #default
                 if index == opt.max_videos:
                     break
