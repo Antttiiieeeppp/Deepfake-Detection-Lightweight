@@ -3,6 +3,13 @@ import json
 import os
 from os import cpu_count
 from pathlib import Path
+import time ##[추가] 추론시간측정
+import torch ## [추가] CPU 설정을 위한 모듈
+from datetime import datetime
+
+# [추가] CPU 설정
+torch.set_num_threads(1)  # CPU 스레드 수 제한
+device = "cpu"  # 강제로 CPU 사용
 
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
@@ -19,8 +26,16 @@ from tqdm import tqdm
 
 from utils import get_video_paths, get_method, get_method_from_name
 
+# [추가] 현재 시간으로 디렉토리 이름 생성
+current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+RESULT_PATH = f"/home/work/Antttiiieeeppp/jh-Lightweight/jaehee/result/{current_time}"
+os.makedirs(RESULT_PATH, exist_ok=True)
+
 def extract_video(video, root_dir, dataset):
     try:
+        total_crop_time = 0  # [추가] 크롭 처리 시간 저장 변수
+        total_crops = 0  # [추가] 처리된 크롭 수
+
         if dataset == 0:
             bboxes_path = os.path.join(opt.data_path, "boxes", os.path.splitext(os.path.basename(video))[0] + ".json")
         else:
@@ -48,6 +63,8 @@ def extract_video(video, root_dir, dataset):
                 continue
             else:
                 counter += 1
+
+            start_time = time.time() #[추가] 크롭 시작 시간
             for bbox in bboxes:
                 xmin, ymin, xmax, ymax = [int(b * 2) for b in bbox]
                 w = xmax - xmin
@@ -69,14 +86,35 @@ def extract_video(video, root_dir, dataset):
                 crop = frame[max(ymin - p_h, 0):ymax + p_h, max(xmin - p_w, 0):xmax + p_w]
                 h, w = crop.shape[:2]
                 crops.append(crop)
+            end_time = time.time()  # [추가] 크롭 종료 시간
 
+            # [추가] 크롭 시간 및 크롭 수 집계
+            total_crop_time += (end_time - start_time)
+            total_crops += len(crops)
             
             
             os.makedirs(os.path.join(opt.output_path, id), exist_ok=True)
             for j, crop in enumerate(crops):
                 cv2.imwrite(os.path.join(opt.output_path, id, "{}_{}.png".format(i, j)), crop)
-        if counter == 0:
-            print(video, counter)
+
+        # [추가] 크롭 시간 결과 기록
+        avg_crop_time = total_crop_time / total_crops if total_crops > 0 else 0
+        experiment_content = f'''Preprocessing step: extract_crops
+            Total crops: {total_crops}
+            Total time: {total_crop_time:.2f}s
+            Avg crop time: {avg_crop_time:.6f} s/crop
+            '''
+            
+        with open(os.path.join(RESULT_PATH, 'experiment_content_crops.txt'), 'w', encoding='utf-8') as file:
+            file.write(experiment_content)
+
+        if total_crops > 0:
+            print(f"\n[추론 시간] 평균 크롭 시간 (CPU): {avg_crop_time:.6f} 초/크롭")
+        else:
+            print("\n[추론 시간] 처리된 크롭이 없습니다.")
+
+        # if counter == 0:
+        #     print(video, counter)
     except e:
         print("Error:", e)
     
