@@ -166,5 +166,7 @@ cython_debug/
 # personal files
 .devcontainer
 .github
+.vscode
+.gitignore
 subtitles.vtt
 test_video.mp4
