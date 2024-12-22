@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import time
+from modify_video import adding_subtitles_to_video, adding_subtitles_to_video_w_list, adding_subtitles_to_video_w_dict
 
 # Page configuration
 st.set_page_config(
@@ -46,8 +47,33 @@ elif page == "Upload Video":
         st.markdown("**Analyzing video for deepfakes...**")
         # Call your detection model here
         # result = detect_video(uploaded_video)  # 재희님
-        ####################################################
-        st.success("Deepfake detected!")  # 저요(승아)
+
+        #####################################################################################
+        # 저요(승아)
+        if isinstance(result, int):  
+            if result == 0:  # 찐
+                st.success("It's a Deepfake FREE-video! Enjoy!")
+            elif result == 1:  # 가짜
+                st.success("It's a fake!")
+                
+                modified_video = adding_subtitles_to_video(uploaded_video, {1: 1}) 
+                st.video(modified_video)
+                
+        elif isinstance(result, list):  # If the result is a list -> [0, 1, 0, 1]
+            st.success("Deepfake detected!")
+            modified_video = adding_subtitles_to_video_w_list(uploaded_video, result)
+            st.video(modified_video)
+            
+        elif isinstance(result, dict):  # If tis a dictionary -> {1: 0, 2: 1, 3: 1}
+            st.success("Deepfake detected!")
+            # Add subtitles at specific timestamps
+            modified_video = adding_subtitles_to_video_w_dict(uploaded_video, result) 
+            st.video(modified_video)
+            
+        else:
+            st.warning("Could not analyze the video. Please try again.")
+
+'''
 
 
 # 3. About Page
