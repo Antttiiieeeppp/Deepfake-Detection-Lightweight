@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import time
+from modify_video import adding_subtitles_to_video, adding_subtitles_to_video_w_list, adding_subtitles_to_video_w_dict
 
 # Page configuration
 st.set_page_config(
