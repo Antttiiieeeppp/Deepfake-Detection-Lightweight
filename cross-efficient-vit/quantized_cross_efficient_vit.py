@@ -1,4 +1,3 @@
-
 import torch
 from torch import nn, einsum
 import torch.nn.functional as F
@@ -7,8 +6,11 @@ import numpy as np
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 from efficient_net.efficientnet_pytorch import EfficientNet
-# import yaml
-# from torchinfo import summary
+# for Quantization
+import torch.quantization
+from torch.quantization import QuantStub, DeQuantStub, fuse_modules
+# observer = torch.quantization.MinMaxObserver(dtype=torch.qint8, quant_min=-128, quant_max=127)
+
 
 # helpers
 
@@ -235,7 +237,7 @@ class ImageEmbedder(nn.Module):
 
 # cross ViT class
 
-class CrossEfficientViT(nn.Module):
+class QuantizedCrossEfficientViT(nn.Module):
     def __init__(
         self,
         *,
@@ -264,7 +266,22 @@ class CrossEfficientViT(nn.Module):
         depth = config['model']['depth']
         dropout = config['model']['dropout']
         emb_dropout = config['model']['emb-dropout']
+        
+        # Quantization modules - Stubs
+        self.quant = QuantStub()
+        self.dequant = DeQuantStub()
 
+        # Configure quantization observers with explicit range
+        self.qconfig = torch.quantization.QConfig(
+            activation=torch.quantization.MinMaxObserver.with_args(
+                quant_min=0, quant_max=255, dtype=torch.quint8
+                # observer = torch.quantization.MinMaxObserver(dtype=torch.qint8, quant_min=-128, quant_max=127)
+            ),
+            weight=torch.quantization.PerChannelMinMaxObserver.with_args(
+                quant_min=-128, quant_max=127, dtype=torch.qint8
+            )
+        )
+        torch.quantization.prepare_qat(self, inplace=True)
 
 
         self.sm_image_embedder = ImageEmbedder(dim = sm_dim, image_size = image_size, patch_size = sm_patch_size, dropout = emb_dropout, efficient_block = 16, channels=sm_channels)
@@ -296,6 +313,9 @@ class CrossEfficientViT(nn.Module):
         self.lg_mlp_head = nn.Sequential(nn.LayerNorm(lg_dim), nn.Linear(lg_dim, num_classes))
 
     def forward(self, img):
+        # Quantize input
+        img = self.quant(img)
+
         sm_tokens = self.sm_image_embedder(img)
         lg_tokens = self.lg_image_embedder(img)
 
@@ -306,18 +326,5 @@ class CrossEfficientViT(nn.Module):
         sm_logits = self.sm_mlp_head(sm_cls)
         lg_logits = self.lg_mlp_head(lg_cls)
 
-        return sm_logits + lg_logits
-
-# # configs 파일 로드
-# with open("configs/architecture.yaml", "r") as f:
-#     config = yaml.safe_load(f)
-
-# # 모델 테스트
-# model = CrossEfficientViT(config=config)
-# test_input = torch.randn(1, 3, 224, 224)
-# output = model(test_input)
-# total_params = sum(p.numel() for p in model.parameters())
-# print(f"Total parameters: {total_params:,}")
-
-# # model summary
-# print(summary(model, device='cpu'))
+        # Dequantize output
+        return self.dequant(sm_logits + lg_logits)
