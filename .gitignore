@@ -161,4 +161,12 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-dfd_venv/  
+# Pretrained-weights for both cross-eff ViT and Eff ViT
+efficient-vit/pretrained_models/efficient_vit.pth
+cross-efficient-vit/pretrained_models/cross_efficient_vit.pth
+
+# files in 'models' after training
+cross-efficient-vit/models/
+
+# graphs and curves in plots
+cross-efficient-vit/plots/

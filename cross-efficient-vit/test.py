@@ -160,7 +160,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--workers', default=10, type=int,
+    parser.add_argument('--workers', default=4, type=int,   # default=10
                         help='Number of data loader workers.')
     parser.add_argument('--model_path', default='', type=str, metavar='PATH',
                         help='Path to model checkpoint (default: none).')
@@ -174,8 +174,8 @@ if __name__ == "__main__":
                         help="Which EfficientNet version to use (0 or 7, default: 0)")
     parser.add_argument('--frames_per_video', type=int, default=30, 
                         help="How many equidistant frames for each video (default: 30)")
-    parser.add_argument('--batch_size', type=int, default=32, 
-                        help="Batch size (default: 32)")
+    parser.add_argument('--batch_size', type=int, default=16, 
+                        help="Batch size (default: 32)")    # default = 32
     
     opt = parser.parse_args()
     print(opt)
