@@ -19,7 +19,7 @@ st.set_page_config(
 # Sidebar for navigation
 with st.sidebar:
     st.title("Navigation")
-    page = st.radio("Choose a page:", ["Home", "Upload Image", "Upload Video", "About"])
+    page = st.radio("Choose a page:", ["Home", "Upload Video", "About"])
 
 # Home Page
 if page == "Home":
