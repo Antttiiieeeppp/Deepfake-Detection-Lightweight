@@ -1,4 +1,4 @@
-from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 
 # apply when the result is a value
 def adding_subtitles_to_video(video_file):
