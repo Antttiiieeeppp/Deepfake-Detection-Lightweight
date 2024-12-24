@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch import nn, einsum
 
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, roc_curve, auc
 from albumentations import Compose, RandomBrightnessContrast, \
     HorizontalFlip, FancyPCA, HueSaturationValue, OneOf, ToGray, \
     ShiftScaleRotate, ImageCompression, PadIfNeeded, GaussNoise, GaussianBlur, Rotate
@@ -30,114 +30,102 @@ import pandas as pd
 from tqdm import tqdm
 from multiprocessing import Manager
 from utils import custom_round, custom_video_round
+from deepfakes_dataset import DeepFakesDataset
+import time
+from sklearn.metrics import precision_score, recall_score
+import GPUtil
 
 import yaml
 import argparse
+import gc
+
+import platform
+import psutil
+import cpuinfo
+import distro
 
 
-MODELS_DIR = "models"
-#BASE_DIR = "../../deep_fakes"
-BASE_DIR = "/home/work/Antttiiieeeppp/deep_fakes_backup" ##샘플데이터
+torch.cuda.empty_cache()
+gc.collect()
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+MODELS_DIR = "result/2024-12-13_01-39-24"
+BASE_DIR = "../../deep_fakes"
 
 DATA_DIR = os.path.join(BASE_DIR, "dataset")
 TEST_DIR = os.path.join(DATA_DIR, "test_set")
-OUTPUT_DIR = os.path.join(MODELS_DIR, "tests")
+RESULT_PATH = os.path.join(MODELS_DIR, "test_result")
+MODEL_PATH = os.path.join(MODELS_DIR, "efficientnetB0")
+
+# 디렉토리 생성
+os.makedirs(RESULT_PATH, exist_ok=True)
 
 TEST_LABELS_PATH = os.path.join(BASE_DIR, "dataset/dfdc_test_labels.csv")
-
-
-if not os.path.exists(MODELS_DIR):
-    os.makedirs(MODELS_DIR)
-
-if not os.path.exists(OUTPUT_DIR):
-    os.makedirs(OUTPUT_DIR)
 
 def create_base_transform(size):
     return Compose([
         IsotropicResize(max_side=size, interpolation_down=cv2.INTER_AREA, interpolation_up=cv2.INTER_CUBIC),
-        PadIfNeeded(min_height=size, min_width=size, border_mode=cv2.BORDER_CONSTANT),
+        PadIfNeeded(min_height=size, min_width=size, border_mode=cv2.BORDER_CONSTANT, value=0),
     ])
 
-def save_roc_curves(correct_labels, preds, model_name, accuracy, loss, f1):
-  plt.figure(1)
-  plt.plot([0, 1], [0, 1], 'k--')
+def plot_roc_auc(val_labels_list, val_preds):
+    # ROC 곡선 계산
+    fpr, tpr, thresholds = roc_curve(val_labels_list, val_preds)
+    roc_auc = auc(fpr, tpr)  # AUC 값 계산
 
-  fpr, tpr, th = metrics.roc_curve(correct_labels, preds)
-
-  model_auc = auc(fpr, tpr)
-
-
-  plt.plot(fpr, tpr, label="Model_"+ model_name + ' (area = {:.3f})'.format(model_auc))
-
-  plt.xlabel('False positive rate')
-  plt.ylabel('True positive rate')
-  plt.title('ROC curve')
-  plt.legend(loc='best')
-  plt.savefig(os.path.join(OUTPUT_DIR, model_name +  "_" + opt.dataset + "_acc" + str(accuracy*100) + "_loss"+str(loss)+"_f1"+str(f1)+".jpg"))
-  plt.clf()
+    # ROC 곡선 그리기
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, color='blue', label=f'ROC curve (AUC = {roc_auc:.4f})')
+    plt.plot([0, 1], [0, 1], color='gray', linestyle='--')  # 무작위 예측선
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver Operating Characteristic (ROC) Curve')
+    plt.legend(loc='lower right')
+    
+    # 그래프 저장
+    plt.savefig(os.path.join(RESULT_PATH, 'roc_auc_curve.png'))
+    return roc_auc
 
 def read_frames(video_path, videos):
     
-    # Get the video label based on dataset selected
-    method = get_method(video_path, DATA_DIR)
-    if "Original" in video_path:
-        label = 0.
-    elif method == "DFDC":
-        test_df = pd.DataFrame(pd.read_csv(TEST_LABELS_PATH))
-        video_folder_name = os.path.basename(video_path)
-        video_key = video_folder_name + ".mp4"
-        label = test_df.loc[test_df['filename'] == video_key]['label'].values[0]
-    else:
-        label = 1.
-    
+    test_df = pd.DataFrame(pd.read_csv(TEST_LABELS_PATH))
+    video_folder_name = os.path.basename(video_path)
+    video_key = video_folder_name + ".mp4"
+    label = test_df.loc[test_df['filename'] == video_key]['label'].values[0]
+   
 
-    # Calculate the interval to extract the frames
-    frames_number = len(os.listdir(video_path))
-    frames_interval = int(frames_number / opt.frames_per_video)
-    frames_paths = os.listdir(video_path)
-    frames_paths_dict = {}
-
-    # Group the faces with the same index, reduce probabiity to skip some faces in the same video
-    for path in frames_paths:
-        for i in range(0,3):
-            if "_" + str(i) in path:
-                if i not in frames_paths_dict.keys():
-                    frames_paths_dict[i] = [path]
-                else:
-                    frames_paths_dict[i].append(path)
-
-    # Select only the frames at a certain interval
-    if frames_interval > 0:
-        for key in frames_paths_dict.keys():
-            if len(frames_paths_dict) > frames_interval:
-                frames_paths_dict[key] = frames_paths_dict[key][::frames_interval]
-            
-            frames_paths_dict[key] = frames_paths_dict[key][:opt.frames_per_video]
-
-    # Select N frames from the collected ones
-    video = {}
-    for key in frames_paths_dict.keys():
-        for index, frame_image in enumerate(frames_paths_dict[key]):
-            #image = np.asarray(resize(cv2.imread(os.path.join(video_path, frame_image)), IMAGE_SIZE))
-            transform = create_base_transform(config['model']['image-size'])
-            image = transform(image=cv2.imread(os.path.join(video_path, frame_image)))['image']
-            if len(image) > 0:
-                if key in video:
-                    video[key].append(image)
-                else:
-                    video[key] = [image]
-    videos.append((video, label, video_path))
+    for frame_path in glob.glob(os.path.join(video_path, "*")):
+        image = cv2.imread(frame_path)
+        if image is not None:
+            image = cv2.resize(image, (config['model']['image-size'], config['model']['image-size']))
+            videos.append((image, label))
 
 
-
-
+def get_gpu_info():
+    # GPU 정보 가져오기
+    gpus = GPUtil.getGPUs()
+    gpu_info = []
+    for gpu in gpus:
+        gpu_info.append({
+            "ID": gpu.id,
+            "Name": gpu.name,  # GPU 모델명
+            "Memory Total": gpu.memoryTotal,
+            "Memory Free": gpu.memoryFree,
+            "Memory Used": gpu.memoryUsed,
+            "GPU Utilization": gpu.load * 100,  # %로 변환
+            "GPU Memory Utilization": gpu.memoryUtil * 100,  # %로 변환
+            "Temperature": gpu.temperature
+        })
+    return gpu_info
 
 # Main body
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--workers', default=10, type=int,
+    parser.add_argument('--workers', default=4, type=int,
                         help='Number of data loader workers.')
     parser.add_argument('--model_path', default='', type=str, metavar='PATH',
                         help='Path to model checkpoint (default: none).')
@@ -165,97 +153,128 @@ if __name__ == "__main__":
     else:
         channels = 2560
 
-    if os.path.exists(opt.model_path):
+    if os.path.exists(MODEL_PATH):
         model = EfficientViT(config=config, channels=channels, selected_efficient_net = opt.efficient_net)
-        model.load_state_dict(torch.load(opt.model_path))
+        model.load_state_dict(torch.load(MODEL_PATH))
         model.eval()
         model = model.cuda()
     else:
         print("No model found.")
         exit()
 
-    model_name = os.path.basename(opt.model_path)
+    model_name = os.path.basename(MODEL_PATH)
 
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-        
     
     preds = []
-    mgr = Manager()
     paths = []
-    videos = mgr.list()
+    videos = []
 
-    if opt.dataset != "DFDC":
-        folders = ["Original", opt.dataset]
-    else:
-        folders = [opt.dataset]
+    folders = ["DFDC"]
 
     for folder in folders:
         method_folder = os.path.join(TEST_DIR, folder)  
         for index, video_folder in enumerate(os.listdir(method_folder)):
             paths.append(os.path.join(method_folder, video_folder))
       
-    with Pool(processes=opt.workers) as p:
-        with tqdm(total=len(paths)) as pbar:
-            for v in p.imap_unordered(partial(read_frames, videos=videos),paths):
-                pbar.update()
 
-    video_names = np.asarray([row[2] for row in videos])
+    for path in tqdm(paths):
+        read_frames(path, videos=videos)
+
     correct_test_labels = np.asarray([row[1] for row in videos])
     videos = np.asarray([row[0] for row in videos])
+    print(videos.shape)
+
+
+    test_dataset = DeepFakesDataset(videos, correct_test_labels, config['model']['image-size'], mode='validation')
+    test_dl = torch.utils.data.DataLoader(test_dataset, batch_size=config['training']['bs'], shuffle=True, sampler=None,
+                                    batch_sampler=None, num_workers=opt.workers, collate_fn=None,
+                                    pin_memory=False, drop_last=False, timeout=0,
+                                    worker_init_fn=None, prefetch_factor=2,
+                                    persistent_workers=False)
+    
+    del test_dataset
+
     preds = []
 
-    bar = Bar('Predicting', max=len(videos))
+    bar = Bar('Predicting', max=len(test_dl))
 
-    f = open(opt.dataset + "_" + model_name + "_labels.txt", "w+")
-    for index, video in enumerate(videos):
-        video_faces_preds = []
-        video_name = video_names[index]
-        f.write(video_name)
-        for key in video:
-            faces_preds = []
-            video_faces = video[key]
-            for i in range(0, len(video_faces), opt.batch_size):
-                faces = video_faces[i:i+opt.batch_size]
-                faces = torch.tensor(np.asarray(faces))
-                if faces.shape[0] == 0:
-                    continue
-                faces = np.transpose(faces, (0, 3, 1, 2))
-                faces = faces.cuda().float()
-                
-                pred = model(faces)
-                
-                scaled_pred = []
-                for idx, p in enumerate(pred):
-                    scaled_pred.append(torch.sigmoid(p))
-                faces_preds.extend(scaled_pred)
-                
-            current_faces_pred = sum(faces_preds)/len(faces_preds)
-            face_pred = current_faces_pred.cpu().detach().numpy()[0]
-            f.write(" " + str(face_pred))
-            video_faces_preds.append(face_pred)
+
+    test_correct = 0
+    test_positive = 0
+    test_negative = 0
+    test_counter = 0
+
+    test_preds = []  # 검증 예측값 저장 리스트
+    test_prob_list = []  # 검증 데이터에 대한 예측 확률 리스트
+    test_labels_list = []  # 검증 실제 레이블 저장 리스트
+    loss_fn = torch.nn.BCEWithLogitsLoss()
+    total_test_loss = 0
+    inference_time_list = []
+
+    for index, (test_images, test_labels) in enumerate(test_dl):
+
+        test_images = np.transpose(test_images, (0, 3, 1, 2))
+        
+        # test_images = test_images.cuda()
+        test_images = test_images.to(device)
+        test_labels = test_labels.unsqueeze(1).float()
+
+        inference_start = time.time()
+        test_pred = model(test_images)
+        inference_time_list.append(round(time.time() - inference_start, 4))
+
+        test_pred = test_pred.cpu().float()
+        
+        test_loss = loss_fn(test_pred, test_labels)
+        total_test_loss += round(test_loss.item(), 2)
+        corrects, positive_class, negative_class = check_correct(test_pred, test_labels)
+        test_correct += corrects
+        test_positive += positive_class
+        test_counter += 1
+        test_negative += negative_class
+
+        test_prob_list.extend(torch.sigmoid(test_pred).detach().numpy().flatten())
+        
+        test_preds.extend(torch.sigmoid(test_pred).detach().numpy().round())  # 예측값 추가            
+        test_labels_list.extend(test_labels.cpu().numpy())  # 실제 레이블 추가
+
         bar.next()
-        if len(video_faces_preds) > 1:
-            video_pred = custom_video_round(video_faces_preds)
-        else:
-            video_pred = video_faces_preds[0]
-        preds.append([video_pred])
-        
-        f.write(" --> " + str(video_pred) + "(CORRECT: " + str(correct_test_labels[index]) + ")" +"\n")
-        
-    f.close()
+    
     bar.finish()
 
-    loss_fn = torch.nn.BCEWithLogitsLoss()
-    tensor_labels = torch.tensor([[float(label)] for label in correct_test_labels])
-    tensor_preds = torch.tensor(preds)
+    test_f1_score = round(f1_score(test_labels_list, test_preds, zero_division=1), 4)  # 검증 F1 score 계산
+    precision = precision_score(test_labels_list, test_preds)
+    recall = recall_score(test_labels_list, test_preds)
+    
+    auc = plot_roc_auc(test_labels_list, test_prob_list)
 
+    gpu_info = get_gpu_info()
+    cpu_info = cpuinfo.get_cpu_info()
+    
+    # 파일에 쓸 내용
+    experiment_content = f'''OS: {platform.system()}
+Version: {distro.name()} {distro.version()}
+Processor: {platform.processor()}
+Architecture: {platform.architecture()}
 
-    loss = loss_fn(tensor_preds, tensor_labels).numpy()
+CPU: {cpu_info['brand_raw']}
+CPU_ARCH: {cpu_info['arch']}
+CPU_CORE: {cpu_info['count']}
 
-    #accuracy = accuracy_score(np.asarray(preds).round(), correct_test_labels)
-    accuracy = accuracy_score(custom_round(np.asarray(preds)), correct_test_labels)
+GPU: {gpu_info[0]["Name"]}
+GPU Memory: {gpu_info[0]["Memory Total"]}
 
-    f1 = f1_score(correct_test_labels, custom_round(np.asarray(preds)))
-    print(model_name, "Test Accuracy:", accuracy, "Loss:", loss, "F1", f1)
-    save_roc_curves(correct_test_labels, preds, model_name, accuracy, loss, f1)
+Model_Name: EfficientNetB0
+Model_Parameter:{get_n_params(model)}
+Device: {device}
+Precision: {round(precision, 4)}
+Recall: {round(recall, 4)}
+F1_score: {round(test_f1_score, 4)}
+AUC: {round(auc, 4)}
+AVG Inference Time: {sum(inference_time_list) / len(inference_time_list)}
+'''
+    print(experiment_content)
+#     =-=-=-=-=-=-=-=
+    # 파일을 쓰기 모드로 열기 (파일이 없으면 새로 생성됨)
+    with open(os.path.join(RESULT_PATH, 'experiment_content.txt'), 'w', encoding='utf-8') as file:
+        file.write(experiment_content)
