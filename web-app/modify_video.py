@@ -1,61 +1,201 @@
-from moviepy import VideoFileClip, TextClip, CompositeVideoClip
+import cv2
+import numpy as np
+import os
 
-# apply when the result is a value
-def adding_subtitles_to_video(video_file):
-    # get input video
-    video = VideoFileClip(video_file)
+def add_badge_with_timestamps(video_file, badge_image, detection_dict):
+    """
+    Adds a badge to the top-right corner of the video at specific timestamps.
 
-    # Create a text clip for the subtitle
-    subtitle = TextClip("Deepfake", fontsize=30, color='red', font="Arial-Bold")
-    subtitle = subtitle.set_pos('right', 'top').set_duration(video.duration)
+    Args:
+        video_file (str): Path to the input video file.
+        badge_image (str): Path to the badge image
+        detection_dict (dict): Dictionary with timestamps as keys and detection status (1 for deepfakes, 0 for skip) 
 
-    video_with_subtitle = CompositeVideoClip([video, subtitle])
+    Returns:
+        str: Path to the saved output video file.
+    """
 
-    temp_output = "/path/to/output_video.mp4"
-    video_with_subtitle.write_videofile(temp_output, codec="libx264")
+    # Load the badge image with transparency support
+    badge = cv2.imread(badge_image, cv2.IMREAD_UNCHANGED)
+    if badge is None:
+        raise FileNotFoundError(f"Badge image not found at {badge_image}")
 
-    return temp_output
+    badge_height, badge_width, badge_channels = badge.shape
 
+    # Ensure the badge has an alpha channel
+    if badge_channels != 4:
+        alpha_channel = np.ones((badge_height, badge_width), dtype=np.uint8) * 255
+        badge = np.dstack((badge, alpha_channel))
 
-# apply when the result is a list
-def adding_subtitles_to_video_w_list(video_file, result_list):
-    video = VideoFileClip(video_file)
+    # Open the video file
+    cap = cv2.VideoCapture(video_file)
+    if not cap.isOpened():
+        raise FileNotFoundError(f"Video file not found or cannot be opened at {video_file}")
 
-    subtitle_clips = []
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
-    # timestamp = deepfake 일때만 나오게
-    for i, detection in enumerate(result_list):
-        if detection == 1:  
-            start_time = i * (video.duration / len(result_list))
-            subtitle = TextClip("Deepfake", fontsize=30, color='red', font="Arial-Bold")
-            subtitle = subtitle.set_pos(('right', 'top')).set_start(start_time).set_duration(video.duration / len(result_list))
-            subtitle_clips.append(subtitle)
+    # Generate output file name
+    output_file = os.path.splitext(video_file)[0] + "_with_badge.mp4"
 
-    video_with_subtitles = CompositeVideoClip([video] + subtitle_clips)
+    out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
 
-    temp_output = "/path/to/output_video.mp4"
-    video_with_subtitles.write_videofile(temp_output, codec="libx264")
+    frame_count = 0
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            print(f"Error reading frame {frame_count}. Ending processing...")
+            break
 
-    return temp_output
+        # Calculate the timestamp
+        timestamp = frame_count / fps
 
+        # Check if the badge should be displayed at this timestamp
+        if int(timestamp) in detection_dict and detection_dict[int(timestamp)] == 1:
+            y_offset = 10
+            x_offset = width - badge_width - 10
 
-# apply this if the result is a dictionary
-def adding_subtitles_to_video_w_dict(video_file, result_dict):
-    video = VideoFileClip(video_file)
-    # Initialize an empty list to hold subtitle clips
-    subtitle_clips = []
+            # Ensure badge fits within frame dimensions
+            if y_offset + badge_height <= height and x_offset + badge_width <= width:
+                for c in range(3):  # Iterate over color channels
+                    alpha = badge[:, :, 3] / 255.0  # Normalize alpha channel
+                    frame[y_offset:y_offset+badge_height, x_offset:x_offset+badge_width, c] = (
+                        badge[:, :, c] * alpha +
+                        frame[y_offset:y_offset+badge_height, x_offset:x_offset+badge_width, c] * (1 - alpha)
+                    )
 
-    for timestamp, detection in result_dict.items():
-        if detection == 1:  # deepfake,
-            subtitle = TextClip("Deepfake", fontsize=30, color='red', font="Arial-Bold")
-            subtitle = subtitle.set_pos(('right', 'top')).set_start(timestamp).set_duration(2)  # -> 2 seconds duration for subtitle
-            subtitle_clips.append(subtitle)
+        out.write(frame)
+        frame_count += 1
 
-    video_with_subtitles = CompositeVideoClip([video] + subtitle_clips)
+    cap.release()
+    out.release()
+    print(f"Output video saved at: {output_file}")
+    return output_file
 
-    # Save the modified video to a temporary dir
-    temp_output = "/path/to/output_video.mp4"
-    video_with_subtitles.write_videofile(temp_output, codec="libx264")
+# Example usage
+# video_path = "input_video.mp4"
+# badge_path = "badge.png"
+# detection_dict = {1: 1, 2: 1, 3: 0}
+# output_file = add_badge_with_timestamps(video_path, badge_path, detection_dict)
+# print(f"Video saved at {output_file}")
 
-    return temp_output
+# import cv2
+# import numpy as np
 
+# def add_badge_with_timestamps(video_file, badge_image, detection_dict):
+#     """
+#     Adds a badge to the top-right corner of the video at specific timestamps.
+
+#     Args:
+#         video_file (str): Path to the input video file.
+#         badge_image (str): Path to the badge image (PNG with transparency recommended).
+#         detection_dict (dict): Dictionary with timestamps as keys and detection status (1 for display, 0 for skip) as values.
+
+#     Returns:
+#         str: Path to the saved output video file.
+#     """
+
+#     # Load the badge image with transparency support
+#     badge = cv2.imread(badge_image, cv2.IMREAD_UNCHANGED)
+#     if badge is None:
+#         raise FileNotFoundError(f"Badge image not found at {badge_image}")
+
+#     badge_height, badge_width, badge_channels = badge.shape
+
+#     # Ensure the badge has an alpha channel
+#     if badge_channels != 4:
+#         alpha_channel = np.ones((badge_height, badge_width), dtype=np.uint8) * 255
+#         badge = np.dstack((badge, alpha_channel))
+
+#     # Open the video file
+#     cap = cv2.VideoCapture(video_file)
+#     if not cap.isOpened():
+#         raise FileNotFoundError(f"Video file not found or cannot be opened at {video_file}")
+
+#     fps = int(cap.get(cv2.CAP_PROP_FPS))
+#     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+#     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+#     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+#     out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
+
+#     frame_count = 0
+#     while cap.isOpened():
+#         ret, frame = cap.read()
+#         if not ret:
+#             print(f"Error reading frame {frame_count}. Ending processing...")
+#             break
+
+#         # Calculate the timestamp
+#         timestamp = frame_count / fps
+
+#         # Check if the badge should be displayed at this timestamp
+#         if int(timestamp) in detection_dict and detection_dict[int(timestamp)] == 1:
+#             y_offset = 10
+#             x_offset = width - badge_width - 10
+
+#             # Ensure badge fits within frame dimensions
+#             if y_offset + badge_height <= height and x_offset + badge_width <= width:
+#                 for c in range(3):  # Iterate over color channels
+#                     alpha = badge[:, :, 3] / 255.0  # Normalize alpha channel
+#                     frame[y_offset:y_offset+badge_height, x_offset:x_offset+badge_width, c] = (
+#                         badge[:, :, c] * alpha +
+#                         frame[y_offset:y_offset+badge_height, x_offset:x_offset+badge_width, c] * (1 - alpha)
+#                     )
+
+#         out.write(frame)
+#         frame_count += 1
+
+#     cap.release()
+#     out.release()
+#     print(f"Output video saved at: {output_file}")
+#     return output_file
+
+# import cv2
+# import numpy as np
+
+# def add_badge_with_timestamps(video_file, badge_image, output_file, detection_dict):
+#     badge = cv2.imread(badge_image, cv2.IMREAD_UNCHANGED)
+#     badge_height, badge_width, _ = badge.shape
+
+#     cap = cv2.VideoCapture(video_file)
+#     fps = int(cap.get(cv2.CAP_PROP_FPS))
+#     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+#     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+#     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+#     out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
+
+#     frame_count = 0
+#     while cap.isOpened():
+#         ret, frame = cap.read()
+#         if not ret:
+#             # break
+#             # 여기여기
+#             print(f"Error reading frame {frame_count}. Skipping...")
+#             continue
+
+#         timestamp = frame_count / fps
+
+#         if int(timestamp) in detection_dict and detection_dict[int(timestamp)] == 1:
+#             y_offset = 10
+#             x_offset = width - badge_width - 10
+
+#             if badge.shape[2] != 4:
+#                 alpha_channel = np.ones((badge_height, badge_width), dtype=badge.dtype) * 255
+#                 badge = np.dstack((badge, alpha_channel))
+
+#             if y_offset + badge_height <= height and x_offset + badge_width <= width:
+#                 for c in range(3):
+#                     alpha = badge[:, :, 3] / 255.0
+#                     frame[y_offset:y_offset+badge_height, x_offset:x_offset+badge_width, c] = (
+#                         badge[:, :, c] * alpha +
+#                         frame[y_offset:y_offset+badge_height, x_offset:x_offset+badge_width, c] * (1 - alpha)
+#                     )
+
+#         out.write(frame)
+#         frame_count += 1
+
+#     cap.release()
+#     out.release()
+#     return output_file
