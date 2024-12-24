@@ -191,9 +191,7 @@ def detect_deepfake(model, cropped_faces_dict):
 
         # 전처리 (preprocess_image 함수 사용)
         input_tensor = preprocess_image(face_np)  # (1, C, H, W) 텐서
-# <<<<<<< 이부분?
         input_tensor = input_tensor.to(device)
-# =======
 
 
         # 모델 추론
@@ -291,23 +289,11 @@ elif page == "Upload Video":
         #         st.image(face_image, caption=f"Cropped Face {i+1}", width=150)  # width를 150으로 설정
         # else:
         #     st.write("No faces detected in the video.")
-        # 임시 파일 삭제
-        # os.remove(video_path)
+        
         # 크롭된 이미지 딕셔너리로 만들기
         cropped_faces_dict = {index: value for index, value in enumerate(cropped_faces)}
         #만든 딕셔터리 출력
         #st.write(cropped_faces_dict)
-        # #
-        # # Call your detection model here
-        # # 모델 로드
-        # MODEL_PATH = "/home/work/Antttiiieeeppp/jh-Lightweight/pretrained_models/effcient_vit.pth"
-        # model = load_model(MODEL_PATH)
-
-        # # cropped_faces_dict = {
-        # #     0: face_np_0,  # 실제 얼굴 이미지(np.ndarray)
-        # #     1: None,       # 얼굴이 없는 경우 예시
-        # #     2: face_np_2
-        # # }
 
         # # 딥페이크 판별
         predictions_dict = detect_deepfake(model, cropped_faces_dict)
@@ -322,20 +308,13 @@ elif page == "Upload Video":
                 # Display the processed video in the Streamlit app
                 st.video(modified_video)
                 st.success("Deepfake detected!")
+                # 임시 파일 삭제
+                os.remove(video_path)
             except Exception as e:
                 st.error(f"An error occurred while processing the video: {e}")
         else:
             st.warning("Could not analyze the video. Please try again.")
-        # if isinstance(predictions_dict, dict):  # If tis a dictionary -> {1: 0, 2: 1, 3: 1}
-        #     # Add subtitles at specific timestamps
-        #     # modified_video = adding_subtitles_to_video_w_dict(video_path, predictions_dict) 
-        #     modified_video = add_badge_with_timestamps(video_path, BADGE_PATH, output_video_path, predictions_dict)
-        #     st.video(modified_video)   
-        #     st.success("Deepfake detected!")
-        # else:
-        #     st.warning("Could not analyze the video. Please try again.")
-        # st.success("된다!")
-        
+      
 # 3. About Page
 elif page == "About":
     st.title("About the Project")
