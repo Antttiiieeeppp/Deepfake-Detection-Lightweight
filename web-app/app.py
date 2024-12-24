@@ -12,17 +12,27 @@ import numpy as np
 import mediapipe as mp
 import torch
 import torch.nn.functional as F
+import yaml
 # jh
 from torchvision import transforms
 # 모델 class 정의
-efficient_vit_path = "/home/work/Antttiiieeeppp/jh-Lightweight/efficient-vit"
-if efficient_vit_path not in sys.path:
-    sys.path.append(efficient_vit_path)
+import sys
+import os
 
+# 상대 경로를 sys.path에 추가
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../efficient-vit")))
+# EfficientViT 클래스 임포트
 from efficient_vit import EfficientViT
+from cnn import SimpleCNN
+
+# from ..efficient_vit import EfficientViT
 # sa
-from modify_video import adding_subtitles_to_video, adding_subtitles_to_video_w_list, adding_subtitles_to_video_w_dict
-from modify_video import adding_subtitles_to_video_w_dict
+from modify_video import add_badge_with_timestamps
+BADGE_PATH = "Faces Resource.png"
+
+# efficient_vit_path = "../efficient-vit/efficient_vit.py"
+# if efficient_vit_path not in sys.path:
+#     sys.path.append(efficient_vit_path)
 
 # functions
 # 크롭된 이미지를 모델에 넣기 위한 전처리 함수
@@ -51,48 +61,49 @@ def predict(cropped_face):
     return prediction, prob.item()
 
 # 2FPS로 프레임 추출
-def extract_frames(video_path, fps=2):
-    cap = cv2.VideoCapture(video_path)
-    original_fps = int(cap.get(cv2.CAP_PROP_FPS))
-    frame_interval = original_fps // fps
-    frames = []
-    count = 0
+# def extract_frames(video_path, fps=2):    # 동일한 함수 2개 -> 하나는 주석 처리 하겠습니다
+#     cap = cv2.VideoCapture(video_path)
+#     original_fps = int(cap.get(cv2.CAP_PROP_FPS))
+#     frame_interval = original_fps // fps
+#     frames = []
+#     count = 0
 
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-        if count % frame_interval == 0:
-            frames.append(frame)
-        count += 1
+#     while cap.isOpened():
+#         ret, frame = cap.read()
+#         if not ret:
+#             break
+#         if count % frame_interval == 0:
+#             frames.append(frame)
+#         count += 1
 
-    cap.release()
-    return frames
-# 얼굴 감지 및 크롭
-def detect_and_crop_faces(frames):
-    cropped_faces = []
-    mp_face_detection = mp.solutions.face_detection
-    face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.7)  # min_detection_confidence 조정
+#     cap.release()
+#     return frames
 
-    for frame in frames:
-        # 얼굴 감지
-        results = face_detection.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        if results.detections:
-            for detection in results.detections:
-                bboxC = detection.location_data.relative_bounding_box
-                h, w, _ = frame.shape
-                x, y, w_box, h_box = int(bboxC.xmin * w), int(bboxC.ymin * h), int(bboxC.width * w), int(bboxC.height * h)
+# # 얼굴 감지 및 크롭
+# def detect_and_crop_faces(frames):
+#     cropped_faces = []
+#     mp_face_detection = mp.solutions.face_detection
+#     face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.7)  # min_detection_confidence 조정
+
+#     for frame in frames:
+#         # 얼굴 감지
+#         results = face_detection.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+#         if results.detections:
+#             for detection in results.detections:
+#                 bboxC = detection.location_data.relative_bounding_box
+#                 h, w, _ = frame.shape
+#                 x, y, w_box, h_box = int(bboxC.xmin * w), int(bboxC.ymin * h), int(bboxC.width * w), int(bboxC.height * h)
                 
-                # 얼굴 크롭
-                cropped_face = frame[y:y + h_box, x:x + w_box]
+#                 # 얼굴 크롭
+#                 cropped_face = frame[y:y + h_box, x:x + w_box]
                 
-                # 224x224로 리사이즈
-                resized_face = cv2.resize(cropped_face, (224, 224))
-                cropped_faces.append(resized_face)
-        else:
-            cropped_faces.append(None)
+#                 # 224x224로 리사이즈
+#                 resized_face = cv2.resize(cropped_face, (224, 224))
+#                 cropped_faces.append(resized_face)
+#         else:
+#             cropped_faces.append(None)
     
-    return cropped_faces
+#     return cropped_faces
 
 # Helper functions for video processing
 def extract_frames(video_path, fps=2):
@@ -104,11 +115,13 @@ def extract_frames(video_path, fps=2):
             break
         frames.append(frame)
     cap.release()
+
     
     # FPS에 맞춰 프레임을 추출
     total_frames = len(frames)
     interval = int(total_frames / (fps * (total_frames / 30)))  # FPS에 맞는 간격 계산
     selected_frames = frames[::interval]  # 2FPS로 프레임 선택
+
     return selected_frames
 
 def detect_and_crop_faces(frames):
@@ -136,11 +149,15 @@ def detect_and_crop_faces(frames):
 # jh
 
 # 모델 로드 함수
-def load_model(model_path: str):
-    model = EfficientViT()
+
+def load_model(model_path: str, device):
+    # model = EfficientViT(config=config, channels=1280, selected_efficient_net = 0)
+    model = SimpleCNN()
     
     # CPU에서 가중치 로드 (GPU 사용 시 map_location='cuda' 등 변경)
-    model.load_state_dict(torch.load(model_path, map_location='cpu'))
+    # model.load_state_dict(torch.load(model_path, map_location='cpu'))
+    model.load_state_dict(torch.load(model_path))
+    model = model.to(device)
     model.eval()
     return model
 
@@ -174,18 +191,36 @@ def detect_deepfake(model, cropped_faces_dict):
 
         # 전처리 (preprocess_image 함수 사용)
         input_tensor = preprocess_image(face_np)  # (1, C, H, W) 텐서
+        input_tensor = input_tensor.to(device)
+
 
         # 모델 추론
         with torch.no_grad():
             output = model(input_tensor)         # shape: (1,1) 가정
             prob = torch.sigmoid(output).item()  # 0~1 확률
-            prediction = 1 if prob > 0.5 else 0   # threshold=0.5
+            prediction = 1 if prob > 0.7 else 0   # threshold=0.5
 
         # 결과: {인덱스: 예측값} 형태로 저장
         results[idx] = prediction
 
     return results
 ##########################
+# real .yaml file
+def load_yaml_config(file_path):
+    with open(file_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return config
+
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+# Call your detection model here
+CONFIG_PATH = "../efficient-vit/configs/architecture.yaml"  # Replace with the actual path
+config = load_yaml_config(CONFIG_PATH)
+# 모델 로드
+# MODEL_PATH = "../efficient-vit/pretrained_models/efficient_vit.pth"
+MODEL_PATH = "../efficient-vit/pretrained_models/kd_cnn.pth"
+model = load_model(MODEL_PATH, device)
+###############################
 
 # Page configuration
 st.set_page_config(
@@ -233,8 +268,10 @@ elif page == "Upload Video":
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_video:
             temp_video.write(uploaded_video.read())
             video_path = temp_video.name
+            # output_video_path = temp_video.name ####
         
         # 2FPS로 프레임 추출
+
         frames = extract_frames(video_path, fps=2)
         total_frames = len(frames)
         st.write(f"Extracted {total_frames} frames from the video.")
@@ -244,63 +281,40 @@ elif page == "Upload Video":
         total_cropped_faces = len(cropped_faces)
         st.write(f"Detected and cropped {total_cropped_faces} faces.")
         # st.write(cropped_faces)
-        # 크롭된 얼굴 출력
-        if cropped_faces:
-            st.write("Cropped Faces:")
-            for i, face in enumerate(cropped_faces):
-                face_image = Image.fromarray(cv2.cvtColor(face, cv2.COLOR_BGR2RGB))
-                st.image(face_image, caption=f"Cropped Face {i+1}", width=150)  # width를 150으로 설정
-        else:
-            st.write("No faces detected in the video.")
-        # 임시 파일 삭제
-        os.remove(video_path)
+        # # 크롭된 얼굴 출력
+        # if cropped_faces:
+        #     st.write("Cropped Faces:")
+        #     for i, face in enumerate(cropped_faces):
+        #         face_image = Image.fromarray(cv2.cvtColor(face, cv2.COLOR_BGR2RGB))
+        #         st.image(face_image, caption=f"Cropped Face {i+1}", width=150)  # width를 150으로 설정
+        # else:
+        #     st.write("No faces detected in the video.")
+        
         # 크롭된 이미지 딕셔너리로 만들기
         cropped_faces_dict = {index: value for index, value in enumerate(cropped_faces)}
         #만든 딕셔터리 출력
         #st.write(cropped_faces_dict)
-        print(cropped_faces_dict)
-        # #
-        # # Call your detection model here
-        # # 모델 로드
-        # MODEL_PATH = "/home/work/Antttiiieeeppp/jh-Lightweight/pretrained_models/effcient_vit.pth"
-        # model = load_model(MODEL_PATH)
-
-        # # cropped_faces_dict = {
-        # #     0: face_np_0,  # 실제 얼굴 이미지(np.ndarray)
-        # #     1: None,       # 얼굴이 없는 경우 예시
-        # #     2: face_np_2
-        # # }
 
         # # 딥페이크 판별
-        # predictions_dict = detect_deepfake(model, cropped_faces_dict)
+        predictions_dict = detect_deepfake(model, cropped_faces_dict)
+        # 테스트
+        print(predictions_dict)
 
-        # print(predictions_dict)
-        #     # result = detect_video(uploaded_video)  # 재희님
-        # ####################################################
-        # if isinstance(predictions_dict, int):  
-        #     if predictions_dict == 0:  # 찐
-        #         st.success("It's a Deepfake FREE-video! Enjoy!")
-        #     elif predictions_dict == 1:  # 가짜
-        #         st.success("It's a fake!")
+        if isinstance(predictions_dict, dict):  # Check if predictions_dict is a valid dictionary
+            try:
+                # Add badge to the video at specific timestamps
+                modified_video = add_badge_with_timestamps(video_path, BADGE_PATH, predictions_dict)
                 
-        #         modified_video = adding_subtitles_to_video(uploaded_video, {1: 1}) 
-        #         st.video(modified_video)
-                
-        # elif isinstance(predictions_dict, list):  # If the predictions_dict is a list -> [0, 1, 0, 1]
-        #     st.success("Deepfake detected!")
-        #     modified_video = adding_subtitles_to_video_w_list(uploaded_video, predictions_dict)
-        #     st.video(modified_video)
-            
-        # elif isinstance(predictions_dict, dict):  # If tis a dictionary -> {1: 0, 2: 1, 3: 1}
-        #     st.success("Deepfake detected!")
-        #     # Add subtitles at specific timestamps
-        #     modified_video = adding_subtitles_to_video_w_dict(uploaded_video, predictions_dict) 
-        #     st.video(modified_video)
-            
-        # else:
-        #     st.warning("Could not analyze the video. Please try again.")
-        st.success("된다!")
-
+                # Display the processed video in the Streamlit app
+                st.video(modified_video)
+                st.success("Deepfake detected!")
+                # 임시 파일 삭제
+                os.remove(video_path)
+            except Exception as e:
+                st.error(f"An error occurred while processing the video: {e}")
+        else:
+            st.warning("Could not analyze the video. Please try again.")
+      
 # 3. About Page
 elif page == "About":
     st.title("About the Project")
