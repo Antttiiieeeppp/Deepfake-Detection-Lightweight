@@ -29,7 +29,7 @@ def add_badge_with_timestamps(video_file, badge_image, detection_dict):
 
     # Open the video file
     cap = cv2.VideoCapture(video_file)
-    if not cap.isOpened()
+    if not cap.isOpened():
         raise FileNotFoundError(f"Video file not found or cannot be opened at {video_file}")
 
     fps = int(cap.get(cv2.CAP_PROP_FPS))
