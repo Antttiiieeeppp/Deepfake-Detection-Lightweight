@@ -129,10 +129,9 @@ def read_frames(video_path, train_dataset, validation_dataset):
                     validation_dataset.append((image, label))
                     
 # Plotting graphs
-'''
-def plot_metrics(train_loss_list, val_loss_list): # train_f1_score_list, val_f1_score_list
-    epochs = range(1, len(train_loss_list) + 1)  # x축 (epoch)
-
+def plot_metrics(train_loss_list, val_loss_list, train_f1_score_list, val_f1_score_list): # lr_list
+    # epochs = range(1, len(train_loss_list) + 1)  # x축 (epoch)
+    epochs = range(1, len(opt.num_epochs) + 1)
     # 1. Loss 그래프
     plt.figure(figsize=(12, 6))
 
@@ -155,10 +154,10 @@ def plot_metrics(train_loss_list, val_loss_list): # train_f1_score_list, val_f1_
     plt.ylabel('F1 Score')
     plt.title('Train and Validation F1 Score')
     plt.legend()
-    plt.savefig(os.path.join(RESULT_PATH, 'CEV'+ str(t) + '_f1_score_comparision.png'))
+    plt.savefig(os.path.join(RESULT_PATH, 'CEV'+ str(t) + '_f1_score.png'))
 
     plt.clf()
-    
+'''    
     # 3. Learning Rate 그래프
     # plt.subplot(2, 2, 3)  # 2행 2열의 세 번째 그래프
     plt.plot(epochs, lr_list, label='Learning Rate', color='green')
@@ -186,15 +185,15 @@ def roc_auc(y, pred):
     display.plot() 
     # plt.show() 
     # save the curve
-    # plt.savefig(os.path.join(RESULT_PATH, "CEV_roc_auc_curve.png"))
-    plt.savefig(os.path.join(RESULT_PATH, "QCEV_roc_auc_curve.png"))
+    plt.savefig(os.path.join(RESULT_PATH, "CEV_roc_auc_curve.png"))
+    # plt.savefig(os.path.join(RESULT_PATH, "QCEV_roc_auc_curve.png"))
     return auc_score
 
 
 # Main body
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_epochs', default=5, type=int,  # default = 300 -> 100 -> 5
+    parser.add_argument('--num_epochs', default=75, type=int,  # default = 300 -> 100 -> 75
                         help='Number of training epochs.')
     parser.add_argument('--workers', default=4, type=int,       # default = 10 -> 4
                         help='Number of data loader workers.')
@@ -218,14 +217,14 @@ if __name__ == "__main__":
         config = yaml.safe_load(ymlfile)
     
     # for regular cross eff vit
-    # model = CrossEfficientViT(config=config)
-    # model.train()   
+    model = CrossEfficientViT(config=config)
+    model.train()   
     
     # for Quantization
-    model = QuantizedCrossEfficientViT(config=config)
-    model.qconfig = torch.quantization.get_default_qat_qconfig('fbgemm')
-    torch.quantization.prepare_qat(model, inplace=True)
-    model.train()
+    # model = QuantizedCrossEfficientViT(config=config)
+    # model.qconfig = torch.quantization.get_default_qat_qconfig('fbgemm')
+    # torch.quantization.prepare_qat(model, inplace=True)
+    # model.train()
     
     optimizer = torch.optim.SGD(model.parameters(), lr=config['training']['lr'], weight_decay=config['training']['weight-decay'])
     scheduler = lr_scheduler.StepLR(optimizer, step_size=config['training']['step-size'], gamma=config['training']['gamma'])
@@ -254,7 +253,7 @@ if __name__ == "__main__":
             subfolder = os.path.join(dataset, folder)
             subfolder_path = os.listdir(subfolder)  ##
             for index, video_folder_name in enumerate(subfolder_path[:len(subfolder_path)//10]): ## 데이터셋 1/10 만 돌리기
-            #for index, video_folder_name in enumerate(os.listdir(subfolder)):      # default
+            # for index, video_folder_name in enumerate(os.listdir(subfolder)):      # default
                 if index == opt.max_videos:
                     break
                 if os.path.isdir(os.path.join(subfolder, video_folder_name)):
@@ -319,7 +318,7 @@ if __name__ == "__main__":
         if not_improved_loss == opt.patience:
             break
         counter = 0
-
+        # init variables for both training and validtion
         total_loss = 0
         total_val_loss = 0
         
@@ -327,6 +326,7 @@ if __name__ == "__main__":
         train_correct = 0
         positive = 0
         negative = 0
+        # starts training
         for index, (images, labels) in enumerate(dl):
             images = np.transpose(images, (0, 3, 1, 2))
             labels = labels.unsqueeze(1)
@@ -358,8 +358,9 @@ if __name__ == "__main__":
                 f"\n\ttrain_0s(= REAL): {negative} | "
                 f"train_1s(= FAKE): {positive}")
                 print("_______________________________________________")
+                # END of train
 
-        # Validation
+        # initialize variables for validation loop
         val_counter = 0
         val_correct = 0
         val_positive = 0
@@ -373,7 +374,7 @@ if __name__ == "__main__":
        
         train_correct /= train_samples
         total_loss /= counter
-        
+        # starts validation
         for index, (val_images, val_labels) in enumerate(val_dl):
             val_images = np.transpose(val_images, (0, 3, 1, 2))
             val_images = val_images.cuda()
@@ -440,8 +441,8 @@ if __name__ == "__main__":
         # save the best model based on validation loss
         if total_val_loss < previous_loss:
             previous_loss = total_val_loss
-            # torch.save(model.state_dict(), BEST_CEV_PATH)   # for regular CEV
-            torch.save(model.state_dict(), BEST_QCEV_PATH) # for quantized CEV
+            torch.save(model.state_dict(), BEST_CEV_PATH)   # for regular CEV
+            # torch.save(model.state_dict(), BEST_QCEV_PATH) # for quantized CEV
             print("*****************************")
             print(f"Best Model saved at epoch {t} ") 
             print("*****************************")
