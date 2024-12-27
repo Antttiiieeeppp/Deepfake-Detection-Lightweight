@@ -50,7 +50,9 @@ def add_badge_with_timestamps(video_file, badge_image, detection_dict):
             break
 
         # Calculate the timestamp
-        timestamp = frame_count / fps
+        # timestamp = frame_count / fps
+        # test test tests
+        timestamp = frame_count // 2
 
         # Check if the badge should be displayed at this timestamp
         if int(timestamp) in detection_dict and detection_dict[int(timestamp)] == 1:

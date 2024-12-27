@@ -27,7 +27,7 @@ from cnn import SimpleCNN
 
 # from ..efficient_vit import EfficientViT
 # sa
-from modify_video import add_badge_with_timestamps
+from modify_video_new import add_badge_with_timestamps
 BADGE_PATH = "mask_badge.png"
 
 # efficient_vit_path = "../efficient-vit/efficient_vit.py"
@@ -268,7 +268,6 @@ elif page == "Upload Video":
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_video:
             temp_video.write(uploaded_video.read())
             video_path = temp_video.name
-            # output_video_path = temp_video.name ####
         
         # 2FPS로 프레임 추출
 
