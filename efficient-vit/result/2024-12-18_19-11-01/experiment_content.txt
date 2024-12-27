@@ -1,0 +1,16 @@
+Model_Name: Efficient-NextViT
+Model_Parameter:72719589
+Device: cuda
+Epoch: 50
+Batch_Size: 32
+Optimizer: SGD
+Scheduler: Step
+Start_Learning_Rate: 0.001
+End_Learning_Rate: 0.001
+
+Training Time: 7061.030746936798
+Best Validation f1_score: 0.8387
+AUC: 0.9089559916166747
+AVG Inference Time: 0.04893694346617238
+
+Note: 추론 시간을 측정하기 위한 테스트

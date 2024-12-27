@@ -1,0 +1,16 @@
+Model_Name: Cross Efficient-ViT
+Model_Parameter:101377610
+Device: cuda
+Epoch: 50
+Batch_Size: 32
+Optimizer: SGD
+Scheduler: Step
+Start_Learning_Rate: 0.01
+End_Learning_Rate: 0.01
+
+Training Time: 18683.09647679329
+Best Validation f1_score: 0.9187
+AUC: 0.9729540791298552
+AVG Inference Time: 0.06693744763670585
+
+Note: 추론 시간을 측정하기 위한 테스트

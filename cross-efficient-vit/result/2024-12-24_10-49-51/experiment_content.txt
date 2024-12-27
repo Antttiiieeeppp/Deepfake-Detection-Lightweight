@@ -1,0 +1,32 @@
+OS: Linux
+Version: Ubuntu 22.04
+Processor: x86_64
+Architecture: ('64bit', 'ELF')
+
+CPU: Intel(R) Xeon(R) Gold 5218 CPU @ 2.30GHz
+CPU_ARCH: X86_64
+CPU_CORE: 4
+
+GPU: CUDA GPU
+GPU Memory: 16384.0
+
+Model_Name: SimpleCNN(More Simple)
+Model_Parameter:511041
+Device: cuda:1
+Epoch: 10
+Batch_Size: 32
+Optimizer: Adam
+Scheduler: ReduceLROnPlateau
+Start_Learning_Rate: 0.01
+End_Learning_Rate: 0.001
+
+Training Time: 57.086058378219604
+Best Validation f1_score: 0.7826
+AUC: 0.3925925925925926
+AVG Inference Time: 0.0068663636363636505
+
+Note: Knowledge Distillation
+    Teacher: Cross-Efficient-ViT
+    Student: SimpleCNN
+    연산 속도를 줄이기 위한 테스트
+    

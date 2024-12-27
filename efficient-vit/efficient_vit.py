@@ -8,6 +8,7 @@ from utils import resize
 import numpy as np
 from torch import einsum
 from random import randint
+
 class Residual(nn.Module):
     def __init__(self, fn):
         super().__init__()

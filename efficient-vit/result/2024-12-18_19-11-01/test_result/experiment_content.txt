@@ -1,0 +1,20 @@
+OS: Linux
+Version: Ubuntu 22.04
+Processor: x86_64
+Architecture: ('64bit', 'ELF')
+
+CPU: Intel(R) Xeon(R) Gold 5218 CPU @ 2.30GHz
+CPU_ARCH: X86_64
+CPU_CORE: 4
+
+GPU: CUDA GPU
+GPU Memory: 22937.0
+
+Model_Name: Efficient-NextVit
+Model_Parameter:72719589
+Device: cuda
+Precision: 0.8673
+Recall: 0.8522
+F1_score: 0.8597
+AUC: 0.9325
+AVG Inference Time: 0.044916993464052285

@@ -1,0 +1,25 @@
+OS: Linux
+Version: Ubuntu 22.04
+Processor: x86_64
+Architecture: ('64bit', 'ELF')
+
+CPU: Intel(R) Xeon(R) Gold 5218 CPU @ 2.30GHz
+CPU_ARCH: X86_64
+CPU_CORE: 4
+
+GPU: CUDA GPU
+GPU Memory: 16384.0
+
+Model_Name: efficientnetb0
+Model_Parameter:511041
+Device: cpu
+Precision: 0.4231
+Recall: 1.0
+F1_score: 0.5946
+AUC: 0.5227
+AVG Inference Time: 4.1354999999999995
+
+Note: Knowledge Distillation
+    Teacher: Cross-Efficient-ViT
+    Student: EfficientNetB0
+    연산 속도 측정을 위한 테스트

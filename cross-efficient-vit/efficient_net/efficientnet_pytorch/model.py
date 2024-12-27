@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
-from efficientnet_pytorch.utils import (
+from .utils import (
     round_filters,
     round_repeats,
     drop_connect,
@@ -39,7 +39,7 @@ class MBConvBlock(nn.Module):
     Args:
         block_args (namedtuple): BlockArgs, defined in utils.py.
         global_params (namedtuple): GlobalParam, defined in utils.py.
-        image_size (tuple or list): [image_height, image_width]. 
+        image_size (tuple or list): [image_height, image_width].
 
     References:
         [1] https://arxiv.org/abs/1704.04861 (MobileNet v1)

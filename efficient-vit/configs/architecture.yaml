@@ -1,5 +1,5 @@
 training:
-  lr: 0.001
+  lr: 0.01
   weight-decay: 0.0000001
   bs: 32
   scheduler: 'steplr'

@@ -40,7 +40,7 @@ from datetime import datetime
 
 torch.cuda.empty_cache()
 gc.collect()
- 
+
 BASE_DIR = '../../deep_fakes/'
 # BASE_DIR = '../../deep_fakes_backup/'
 # BASE_DIR = '../../deep_fakes_tmp/'
@@ -59,11 +59,7 @@ RESULT_PATH = f"result/{current_time}"
 # 디렉토리 생성
 os.makedirs(RESULT_PATH, exist_ok=True)
 
-
-
-
 def read_frames(video_path, train_dataset, validation_dataset):
-    
     # Get the video label based on dataset selected
     # method = get_method(video_path, DATA_DIR)
     # print(TRAINING_DIR)
@@ -263,8 +259,8 @@ if __name__ == "__main__":
     model = EfficientViT(config=config, channels=channels, selected_efficient_net = opt.efficient_net)
     model.train()
     
-    # optimizer = torch.optim.SGD(model.parameters(), lr=config['training']['lr'], weight_decay=config['training']['weight-decay'])
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config['training']['lr'], weight_decay=config['training']['weight-decay'])
+    optimizer = torch.optim.SGD(model.parameters(), lr=config['training']['lr'], weight_decay=config['training']['weight-decay'])
+    # optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['lr'], weight_decay=config['training']['weight-decay'])
     # scheduler = lr_scheduler.StepLR(optimizer, step_size=config['training']['step-size'], gamma=config['training']['gamma'])
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.1)
     starting_epoch = 1
@@ -348,7 +344,7 @@ if __name__ == "__main__":
     del validation_dataset
     
 
-    device = "cuda" if torch.cuda.is_available() else "cpy"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     # model = model.cuda()
     model = model.to(device)
     print("=-=-=-=-=-=")
@@ -498,16 +494,18 @@ if __name__ == "__main__":
     
     if not os.path.exists(MODELS_PATH):
         os.makedirs(MODELS_PATH)
-    torch.save(model.state_dict(), os.path.join(MODELS_PATH,  "efficientnetB"+str(opt.efficient_net)+ str(opt.num_epochs) + "_" + opt.dataset))
+    torch.save(model.state_dict(), os.path.join(RESULT_PATH,  "efficientnetB"+str(opt.efficient_net)+ str(opt.num_epochs) + "_" + opt.dataset))
 
     # 파일에 쓸 내용
-    experiment_content = """
-    Model_Name: Efficient-ViT
-    Epoch: 50
-    Batch_Size: 32
-    Optimizer: AdamW
-    Start_Learning_Rate: 0.001
+    experiment_content = f"""Model_Name: Efficient-ViT
+    Epoch: {opt.num_epochs}
+    Batch_Size: {config['training']['bs']}
+    Optimizer: SGD
     Scheduler: ReduceLROnPlateau
+            patience: 5
+            factor: 0.1
+    Start_Learning_Rate: {config['training']['lr']}
+    Last_Learning_Rate: 
     Note: 성능 기준을 잡기 위한 모델 학습
     """
 

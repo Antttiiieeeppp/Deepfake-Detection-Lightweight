@@ -1,3 +1,4 @@
+
 import torch
 from torch import nn, einsum
 import torch.nn.functional as F
@@ -6,8 +7,6 @@ import numpy as np
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 from efficient_net.efficientnet_pytorch import EfficientNet
-# import yaml
-# from torchinfo import summary
 
 # helpers
 
@@ -150,7 +149,7 @@ class MultiScaleEncoder(nn.Module):
         lg_enc_params,
         cross_attn_heads,
         cross_attn_depth,
-        cross_attn_dim_head = 32, # 64
+        cross_attn_dim_head = 64,
         dropout = 0.
     ):
         super().__init__()
@@ -306,17 +305,3 @@ class CrossEfficientViT(nn.Module):
         lg_logits = self.lg_mlp_head(lg_cls)
 
         return sm_logits + lg_logits
-
-# # configs 파일 로드
-# with open("configs/architecture.yaml", "r") as f:
-#     config = yaml.safe_load(f)
-
-# # 모델 테스트
-# model = CrossEfficientViT(config=config)
-# test_input = torch.randn(1, 3, 224, 224)
-# output = model(test_input)
-# total_params = sum(p.numel() for p in model.parameters())
-# print(f"Total parameters: {total_params:,}")
-
-# # model summary
-# print(summary(model, device='cpu'))

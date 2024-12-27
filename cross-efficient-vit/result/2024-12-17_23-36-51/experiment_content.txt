@@ -1,0 +1,19 @@
+Model_Name: efficientnetb0
+Model_Parameter:4008829
+Device: cuda
+Epoch: 50
+Batch_Size: 32
+Optimizer: Adam
+Scheduler: ReduceLROnPlateau
+Start_Learning_Rate: 0.01
+End_Learning_Rate: 0.001
+
+Training Time: 8413.67144536972
+Best Validation f1_score: 0.9072
+AUC: 0.9693583268551612
+AVG Inference Time: 0.07007064874884981
+
+Note: Knowledge Distillation
+    Teacher: Cross EFficient-ViT
+    Student: EfficientNetB0
+    

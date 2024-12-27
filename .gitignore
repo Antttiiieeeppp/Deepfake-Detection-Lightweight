@@ -170,3 +170,7 @@ cross-efficient-vit/models/
 
 # graphs and curves in plots
 cross-efficient-vit/plots/
+
+*.pt
+*.pth
+*.pt0

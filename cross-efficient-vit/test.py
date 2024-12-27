@@ -9,13 +9,15 @@ import cv2
 import numpy as np
 import torch
 from torch import nn, einsum
-from sklearn.metrics import plot_confusion_matrix
+# from sklearn.metrics import plot_confusion_matrix
+# from sklearn.metrics import ConfusionMatrixDisplay
 
 from utils import get_method, check_correct, resize, shuffle_dataset, get_n_params
 import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
 from cross_efficient_vit import CrossEfficientViT
+from cnn import SimpleCNN
 from utils import transform_frame
 import glob
 from os import cpu_count
@@ -32,16 +34,19 @@ from albumentations import Compose, RandomBrightnessContrast, \
 from transforms.albu import IsotropicResize
 import yaml
 import argparse
+import time
 
 #########################
 ####### CONSTANTS #######
 #########################
 
-MODELS_DIR = "models"
-BASE_DIR = "../../deep_fakes"
+# MODELS_DIR = "result/2024-12-13_04-41-08/efficientnetB0.pt" # cross-efficient-vit
+MODELS_DIR = "result/2024-12-21_01-09-55/kd-cross-efficient-vit.pt" # kd-cnn
+BASE_DIR = "../../../deep_fakes"
 DATA_DIR = os.path.join(BASE_DIR, "dataset")
 TEST_DIR = os.path.join(DATA_DIR, "test_set")
-OUTPUT_DIR = os.path.join(MODELS_DIR, "tests")
+OUTPUT_DIR = "result"
+# OUTPUT_DIR = os.path.join(MODELS_DIR, "tests")
 
 TEST_LABELS_PATH = os.path.join(BASE_DIR, "dataset/dfdc_test_labels.csv")
 
@@ -157,10 +162,11 @@ def create_base_transform(size):
 
 # Main body
 if __name__ == "__main__":
+    device = "cuda:1" if torch.cuda.is_available() else "cpu"
     
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--workers', default=4, type=int,   # default=10
+    parser.add_argument('--workers', default=10, type=int,
                         help='Number of data loader workers.')
     parser.add_argument('--model_path', default='', type=str, metavar='PATH',
                         help='Path to model checkpoint (default: none).')
@@ -174,8 +180,8 @@ if __name__ == "__main__":
                         help="Which EfficientNet version to use (0 or 7, default: 0)")
     parser.add_argument('--frames_per_video', type=int, default=30, 
                         help="How many equidistant frames for each video (default: 30)")
-    parser.add_argument('--batch_size', type=int, default=16, 
-                        help="Batch size (default: 32)")    # default = 32
+    parser.add_argument('--batch_size', type=int, default=32, 
+                        help="Batch size (default: 32)")
     
     opt = parser.parse_args()
     print(opt)
@@ -184,11 +190,12 @@ if __name__ == "__main__":
         config = yaml.safe_load(ymlfile)
  
         
-    if os.path.exists(opt.model_path):
-        model = CrossEfficientViT(config=config)
-        model.load_state_dict(torch.load(opt.model_path))
+    if os.path.exists(MODELS_DIR):
+        # model = CrossEfficientViT(config=config)
+        model = SimpleCNN()
+        model.load_state_dict(torch.load(MODELS_DIR))
         model.eval()
-        model = model.cuda()
+        model = model.to(device)
     else:
         print("No model found.")
         exit()
@@ -240,8 +247,9 @@ if __name__ == "__main__":
 
     # Perform prediction
     bar = Bar('Predicting', max=len(videos))
-
+    total_inference_time = 0
     f = open(opt.dataset + "_" + model_name + "_labels.txt", "w+")
+    
     for index, video in enumerate(videos):
         video_faces_preds = []
         video_name = video_names[index]
@@ -255,9 +263,11 @@ if __name__ == "__main__":
                 if faces.shape[0] == 0:
                     continue
                 faces = np.transpose(faces, (0, 3, 1, 2))
-                faces = faces.cuda().float()
-                
+                faces = faces.to(device).float()
+                start_time = time.time()
                 pred = model(faces)
+                total_inference_time += time.time() - start_time
+
                 
                 scaled_pred = []
                 for idx, p in enumerate(pred):
@@ -276,7 +286,7 @@ if __name__ == "__main__":
         preds.append([video_pred])
         
         f.write(" --> " + str(video_pred) + "(CORRECT: " + str(correct_test_labels[index]) + ")" +"\n")
-        
+    print(f"inference time : {total_inference_time}")
     f.close()
     bar.finish()
 

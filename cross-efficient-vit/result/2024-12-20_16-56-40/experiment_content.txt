@@ -1,0 +1,31 @@
+OS: Linux
+Version: Ubuntu 22.04
+Processor: x86_64
+Architecture: ('64bit', 'ELF')
+
+CPU: Intel(R) Xeon(R) Gold 5218 CPU @ 2.30GHz
+CPU_ARCH: X86_64
+CPU_CORE: 4
+
+GPU: CUDA GPU
+GPU Memory: 16384.0
+
+Model_Name: SimpleCNN
+Model_Parameter:1324033
+Device: cuda:0
+Epoch: 50
+Batch_Size: 32
+Optimizer: Adam
+Scheduler: ReduceLROnPlateau
+Start_Learning_Rate: 0.01
+End_Learning_Rate: 0.001
+
+Training Time: 6098.03071808815
+Best Validation f1_score: 0.8957
+AUC: 0.9584008244798313
+AVG Inference Time: 0.003003416126044111
+
+Note: Knowledge Distillation
+    Teacher: Cross-Efficient-ViT
+    Student: SimpleCNN
+    

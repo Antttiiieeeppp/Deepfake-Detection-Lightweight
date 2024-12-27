@@ -1,0 +1,29 @@
+OS: Linux
+Version: Ubuntu 22.04
+Processor: x86_64
+Architecture: ('64bit', 'ELF')
+
+CPU: Intel(R) Xeon(R) Gold 5218 CPU @ 2.30GHz
+CPU_ARCH: X86_64
+CPU_CORE: 4
+
+GPU: CUDA GPU
+GPU Memory: 22937.0
+
+Model_Name: Efficient-ViT
+Model_Parameter:109447781
+Device: cuda
+Epoch: 50
+Batch_Size: 32
+Optimizer: SGD
+Scheduler: StepLR
+
+Start_Learning_Rate: 0.01
+End_Learning_Rate: 1.0000000000000006e-12
+
+Training Time: 6451.2044904232025
+Best Validation f1_score: 0.8178
+AUC: 0.8827531091152365
+AVG Inference Time: 0.036828257645968546
+
+Note: 성능 기준을 위한 Base 모델 학습
