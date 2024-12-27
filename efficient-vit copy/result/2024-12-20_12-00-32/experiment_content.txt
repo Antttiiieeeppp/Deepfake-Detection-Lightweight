@@ -1,0 +1,16 @@
+Model_Name: Efficient-NextViT
+Model_Parameter:72719589
+Device: cuda:0
+Epoch: 50
+Batch_Size: 32
+Optimizer: Adamw
+Scheduler: ReduceLROnPlateau
+Start_Learning_Rate: 0.001
+End_Learning_Rate: 1.0000000000000004e-08
+
+Training Time: 6198.566292524338
+Best Validation f1_score: 0.8915
+AUC: 0.9565083222104339
+AVG Inference Time: 0.039320044485637806
+
+Note: 추론 시간을 측정하기 위한 테스트
